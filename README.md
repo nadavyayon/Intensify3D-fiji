@@ -21,9 +21,32 @@
    - Original image is converted to **32-bit** and divided by the background image.  
 
 ## 📥 Installation  
-### 1️⃣ Download Fiji  
-If you don’t have **Fiji**, download it from [Fiji website](https://imagej.net/software/fiji/).  
 
-### 2️⃣ Clone This Repository  
-```sh
-git clone https://github.com/nadavyayon/Intensify3D-Fiji.git
+### 1️⃣ Install in Fiji  
+1. **Download the latest `Intensify3D-Fiji.jar`** from [Releases](https://github.com/nadavyayon/Intensify3D-Fiji/releases).  
+2. **Copy the `.jar` file** to the **Fiji Plugins** folder:  
+   - On **Windows**: `C:\Fiji.app\plugins\`  
+   - On **Mac/Linux**: `~/Fiji.app/plugins/`  
+3. **Restart Fiji**.  
+4. The plugin will now appear under **Plugins > Intensify3D**.  
+
+## 🚀 Usage  
+1. **Launch Fiji**, then open *Intensify3D-Fiji* from the **Plugins** menu.  
+2. **Select an image folder** containing **TIFF images**.  
+3. **Set the MBI threshold** and preview the quantile distribution.  
+4. **Adjust the filter size** for background smoothing.  
+5. Click **Run** to process all images in the folder.  
+
+## 🔧 Requirements  
+- **Java 8+**  
+- **Fiji (ImageJ-based distribution)**  
+
+## 📜 License  
+This project is released under the **MIT License**. See [LICENSE](https://github.com/nadavyayon/Intensify3D/blob/master/LICENSE) for details.  
+
+## 👨‍💻 Author  
+Developed by **Nadav Yayon** as part of an effort to enhance fluorescence microscopy intensity normalization using Fiji.  
+
+---
+
+🚀 *Happy imaging! Let me know if you have any issues or feature requests!*  
