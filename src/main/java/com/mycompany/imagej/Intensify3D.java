@@ -426,7 +426,7 @@ public class Intensify3D {
 
 		for (int i = 0; i < totalFiles; i++) {
 			File originalImageFile = imageFiles[i];
-			File noiseImageFile = new File(noiseDir, "noise_" + originalImageFile.getName());
+			File noiseImageFile = new File(noiseDir, "back_" + originalImageFile.getName());
 
 			if (!noiseImageFile.exists()) {
 				System.err.println("noise image not found for: " + originalImageFile.getName());
