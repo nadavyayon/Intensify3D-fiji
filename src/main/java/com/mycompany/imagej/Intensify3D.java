@@ -42,7 +42,7 @@ public class Intensify3D {
 		JFrame frame = new JFrame("Intensify3D - Image Normalization");
 		frame.setSize(600, 450);
 		frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-		frame.setLayout(new GridLayout(10, 2));
+		frame.setLayout(new GridLayout(11, 2)); // Increased row count to fit new elements
 
 		frame.add(new JLabel("Select Image Stack Directory:"));
 		JPanel pathPanel = new JPanel(new BorderLayout());
@@ -75,24 +75,37 @@ public class Intensify3D {
 		filterSizeSpinner = new JSpinner(new SpinnerNumberModel(3, 3, 20, 1));
 		frame.add(filterSizeSpinner);
 
-		// ✅ Progress Bar (LOCAL VARIABLE)
+		// ✅ Progress Bar
 		frame.add(new JLabel("Progress:"));
 		JProgressBar progressBar = new JProgressBar(0, 100);
 		progressBar.setStringPainted(true);
 		progressBar.setVisible(false);
 		frame.add(progressBar);
 
+		// ✅ Status Label
+		JLabel statusLabel = new JLabel("Status: Waiting...");
+		frame.add(statusLabel);
+
+		// ✅ Execute Buttons
 		JButton executeButton = new JButton("Generate Noise Images");
-		executeButton.addActionListener(e -> new Thread(() -> generateNoiseImages(progressBar)).start());		frame.add(executeButton);
+		executeButton.addActionListener(e -> new Thread(() -> {
+			statusLabel.setText("Status: Processing Noise Images...");
+			generateNoiseImages(progressBar);
+			statusLabel.setText("Status: Noise Images Generated.");
+		}).start());
+		frame.add(executeButton);
 
 		JButton normalizeButton = new JButton("Normalize Images");
-		normalizeButton.addActionListener(e -> new Thread(() -> generateNormalizedImages(progressBar)).start());
+		normalizeButton.addActionListener(e -> new Thread(() -> {
+			statusLabel.setText("Status: Normalizing Images...");
+			generateNormalizedImages(progressBar);
+			statusLabel.setText("Status: Normalization Complete.");
+		}).start());
 		frame.add(normalizeButton);
 
-		frame.add(new JLabel(""));
+
 		frame.setVisible(true);
 	}
-
 
 	private void updateFilterSizeBounds() {
 		if (selectedImageFile == null) return;
@@ -149,15 +162,26 @@ public class Intensify3D {
 		ImagePlus image = IJ.openImage(selectedImageFile.getAbsolutePath());
 		if (image != null) {
 			image.show();
-			IJ.run("Threshold...");
+			IJ.run("Threshold..."); // Apply threshold to get default min/max values
 
 			ImageProcessor ip = image.getProcessor();
 			int[] pixelValues = samplePixelValues(ip, 10000);
 
 			if (pixelValues.length > 0) {
 				Arrays.sort(pixelValues);
-				int MNIValue = (int) MNISpinner.getValue();
-				int quantileValue = findQuantile(pixelValues, MNIValue);
+
+				// ✅ Get the default threshold max from ImageJ (not just MAX intensity)
+				double autoMaxMNI = ip.getMaxThreshold();
+
+				// ✅ Ensure it's a valid value (ImageJ may return NaN if no threshold was set)
+				if (Double.isNaN(autoMaxMNI)) {
+					autoMaxMNI = ip.getMax(); // Fallback to max intensity if threshold is not set
+				}
+
+				// ✅ Update MNI Spinner with detected max threshold
+				MNISpinner.setValue((int) autoMaxMNI);
+
+				int quantileValue = findQuantile(pixelValues, (int) autoMaxMNI);
 				quantileLabel.setText("MNI Quantile: " + quantileValue);
 			} else {
 				quantileLabel.setText("No valid pixels found.");
@@ -169,7 +193,6 @@ public class Intensify3D {
 			JOptionPane.showMessageDialog(null, "Failed to open the image!", "Error", JOptionPane.ERROR_MESSAGE);
 		}
 	}
-
 
 	private int[] samplePixelValues(ImageProcessor ip, int sampleSize) {
 		Object pixels = ip.getPixels(); // Get the raw pixel array
@@ -403,7 +426,7 @@ public class Intensify3D {
 		}
 
 		File directory = new File(stackFolderField.getText());
-		File noiseDir = new File(directory, "noise_images");
+		File noiseDir = new File(stackFolderField.getText(), "noise_images");
 		File normDir = new File(directory, "norm_noise");
 
 		if (!noiseDir.exists()) {
@@ -426,7 +449,7 @@ public class Intensify3D {
 
 		for (int i = 0; i < totalFiles; i++) {
 			File originalImageFile = imageFiles[i];
-			File noiseImageFile = new File(noiseDir, "back_" + originalImageFile.getName());
+			File noiseImageFile = new File(noiseDir, "noise_" + originalImageFile.getName());
 
 			if (!noiseImageFile.exists()) {
 				System.err.println("noise image not found for: " + originalImageFile.getName());
