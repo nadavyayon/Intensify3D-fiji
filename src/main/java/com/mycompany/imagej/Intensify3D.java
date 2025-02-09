@@ -187,6 +187,7 @@ public class Intensify3D {
 				quantileLabel.setText("No valid pixels found.");
 			}
 
+
 			// ✅ Update filter size after preview image is opened
 			updateFilterSizeBounds();
 		} else {
