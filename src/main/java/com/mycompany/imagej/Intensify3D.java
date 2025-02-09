@@ -6,37 +6,30 @@ import ij.ImagePlus;
 import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
 import ij.process.ImageStatistics;
+import com.mycompany.imagej.SavitzkyGolay2D; // Corrected import
+import ij.process.ShortProcessor;
 
+import java.util.*;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.io.File;
 import java.io.FilenameFilter;
-import java.util.Arrays;
-import java.util.HashMap;
 import javax.swing.JProgressBar;
 import javax.swing.SwingUtilities;
-//import javax.swing.*;
 
-
-/**
- * Intensify3D - Image Normalization Tool
- * Now includes:
- *  ✅ Image preview
- *  ✅ Max Noise Intensity (MNI) selection
- *
- * @author Nadav Yayon
- */
 public class Intensify3D {
-	// GUI Components
-	private JTextField stackFolderField;
-	private JLabel imageCountLabel;
-	private JLabel MNILabel;
-	private JSpinner MNISpinner;
-	private File selectedImageFile;
+
+	// ... (GUI components - no changes here) ...
+	private JTextField stackFolderField;       // Text field to display/enter the image stack directory.
+	private JLabel imageCountLabel;          // Label to display the number of TIFF images found.
+	private JLabel MNILabel;                // Label for MNI (Max Noise Intensity)
+	private JSpinner MNISpinner;            // Spinner to select the MNI value.
+	private File selectedImageFile;           // Stores a reference to a selected image file (used for preview/calculations).
 
 	// Add this field to store filter size
-	private JSpinner filterSizeSpinner;
+	private JSpinner filterSizeSpinner;      // Spinner to select the Savitzky-Golay filter size.
+	private JLabel quantileLabel; // GUI label for displaying quantile
 
 	public void showDialog() {
 		JFrame frame = new JFrame("Intensify3D - Image Normalization");
@@ -44,24 +37,28 @@ public class Intensify3D {
 		frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 		frame.setLayout(new GridLayout(11, 2)); // Increased row count to fit new elements
 
-		frame.add(new JLabel("Select Image Stack Directory:"));
-		JPanel pathPanel = new JPanel(new BorderLayout());
-		stackFolderField = new JTextField();
-		JButton browseButton = new JButton("Browse...");
-		browseButton.addActionListener(this::browseForDirectory);
-		pathPanel.add(stackFolderField, BorderLayout.CENTER);
-		pathPanel.add(browseButton, BorderLayout.EAST);
-		frame.add(pathPanel);
+		// --- Row 1: Directory Selection ---
+		frame.add(new JLabel("Select Image Stack Directory:"));  // Label for the directory selection
+		JPanel pathPanel = new JPanel(new BorderLayout());      // Panel to hold the text field and browse button
+		stackFolderField = new JTextField();                    // Text field for the directory path
+		JButton browseButton = new JButton("Browse...");      // Button to open a file chooser
+		browseButton.addActionListener(this::browseForDirectory);    // Action listener for the browse button
+		pathPanel.add(stackFolderField, BorderLayout.CENTER);     // Add text field to the center of the panel
+		pathPanel.add(browseButton, BorderLayout.EAST);        // Add browse button to the right of the panel
+		frame.add(pathPanel);                                   // Add the panel to the frame
 
-		frame.add(new JLabel("Images to Process:"));
-		imageCountLabel = new JLabel("0");
-		frame.add(imageCountLabel);
+		// --- Row 2: Image Count ---
+		frame.add(new JLabel("Images to Process:"));            // Label for image count
+		imageCountLabel = new JLabel("0");                      // Label to display the number of images
+		frame.add(imageCountLabel);                             // Add image count label to the frame
 
+		// ---  Image preview ---
 		JButton previewButton = new JButton("Preview Image");
 		previewButton.addActionListener(this::previewExampleImage);
 		frame.add(previewButton);
 		frame.add(new JLabel(""));
 
+		// ---  MNI selection ---
 		frame.add(new JLabel("Max Noise Intensity (MNI):"));
 		MNISpinner = new JSpinner(new SpinnerNumberModel(50, 0, 65535, 1));
 		MNISpinner.addChangeListener(e -> updateQuantile());
@@ -71,42 +68,42 @@ public class Intensify3D {
 		quantileLabel = new JLabel("N/A");
 		frame.add(quantileLabel);
 
-		frame.add(new JLabel("Filter Size:"));
-		filterSizeSpinner = new JSpinner(new SpinnerNumberModel(3, 3, 20, 1));
-		frame.add(filterSizeSpinner);
 
-		// ✅ Progress Bar
-		frame.add(new JLabel("Progress:"));
-		JProgressBar progressBar = new JProgressBar(0, 100);
-		progressBar.setStringPainted(true);
-		progressBar.setVisible(false);
-		frame.add(progressBar);
+		// --- Row 3: Filter Size Selection ---
+		frame.add(new JLabel("Filter Size:"));                   // Label for the filter size spinner
+		filterSizeSpinner = new JSpinner(new SpinnerNumberModel(3, 3, 100000000, 1)); // Spinner for filter size (default 3, min 3, step 1)
+		frame.add(filterSizeSpinner);                            // Add filter size spinner to the frame
 
-		// ✅ Status Label
-		JLabel statusLabel = new JLabel("Status: Waiting...");
-		frame.add(statusLabel);
+		// --- Row 4: Progress Bar ---
+		frame.add(new JLabel("Progress:"));                      // Label for the progress bar
+		JProgressBar progressBar = new JProgressBar(0, 100);     // Progress bar (0-100%)
+		progressBar.setStringPainted(true);                    // Display the percentage value
+		progressBar.setVisible(false);                         // Initially hidden
+		frame.add(progressBar);                                 // Add progress bar to the frame
 
-		// ✅ Execute Buttons
-		JButton executeButton = new JButton("Generate Noise Images");
-		executeButton.addActionListener(e -> new Thread(() -> {
-			statusLabel.setText("Status: Processing Noise Images...");
-			generateNoiseImages(progressBar);
-			statusLabel.setText("Status: Noise Images Generated.");
+		// --- Row 5: Status Label ---
+		JLabel statusLabel = new JLabel("Status: Waiting...");   // Status label to display messages
+		frame.add(statusLabel);                                 // Add status label to the frame
+
+		// --- Row 6 & 7: Execute Buttons ---
+		JButton executeButton = new JButton("Generate Noise Images"); // Button to start noise image generation
+		executeButton.addActionListener(e -> new Thread(() -> {      // Run in a separate thread to prevent GUI freezing
+			statusLabel.setText("Status: Processing Noise Images..."); // Update status label
+			generateNoiseImages(progressBar);                           // Call method to generate noise images
+			statusLabel.setText("Status: Noise Images Generated.");      // Update status label
 		}).start());
-		frame.add(executeButton);
+		frame.add(executeButton);                                       // Add execute button to the frame
 
-		JButton normalizeButton = new JButton("Normalize Images");
-		normalizeButton.addActionListener(e -> new Thread(() -> {
-			statusLabel.setText("Status: Normalizing Images...");
-			generateNormalizedImages(progressBar);
-			statusLabel.setText("Status: Normalization Complete.");
+		JButton normalizeButton = new JButton("Normalize Images");      // Button to start image normalization
+		normalizeButton.addActionListener(e -> new Thread(() -> {        // Run in a separate thread
+			statusLabel.setText("Status: Normalizing Images...");      // Update status label
+			generateNormalizedImages(progressBar);                      // Call method to normalize images
+			statusLabel.setText("Status: Normalization Complete.");    // Update status label
 		}).start());
-		frame.add(normalizeButton);
+		frame.add(normalizeButton);                                     // Add normalize button to the frame
 
-
-		frame.setVisible(true);
+		frame.setVisible(true);                                         // Make the frame visible
 	}
-
 	private void updateFilterSizeBounds() {
 		if (selectedImageFile == null) return;
 
@@ -140,18 +137,14 @@ public class Intensify3D {
 	}
 
 	private void updateImageCount(File directory) {
-		// Count the number of TIFF images in the folder
 		File[] tiffFiles = directory.listFiles((FilenameFilter) (dir, name) -> name.toLowerCase().endsWith(".tif") || name.toLowerCase().endsWith(".tiff"));
 		int count = (tiffFiles == null) ? 0 : tiffFiles.length;
 		imageCountLabel.setText(String.valueOf(count));
 
-		// Store an example image to preview
 		if (count > 0) {
 			selectedImageFile = tiffFiles[0];
 		}
 	}
-
-	private JLabel quantileLabel; // GUI label for displaying quantile
 
 	private void previewExampleImage(ActionEvent e) {
 		if (selectedImageFile == null) {
@@ -169,16 +162,11 @@ public class Intensify3D {
 
 			if (pixelValues.length > 0) {
 				Arrays.sort(pixelValues);
-
-				// ✅ Get the default threshold max from ImageJ (not just MAX intensity)
 				double autoMaxMNI = ip.getMaxThreshold();
 
-				// ✅ Ensure it's a valid value (ImageJ may return NaN if no threshold was set)
 				if (Double.isNaN(autoMaxMNI)) {
-					autoMaxMNI = ip.getMax(); // Fallback to max intensity if threshold is not set
+					autoMaxMNI = ip.getMax();
 				}
-
-				// ✅ Update MNI Spinner with detected max threshold
 				MNISpinner.setValue((int) autoMaxMNI);
 
 				int quantileValue = findQuantile(pixelValues, (int) autoMaxMNI);
@@ -187,46 +175,46 @@ public class Intensify3D {
 				quantileLabel.setText("No valid pixels found.");
 			}
 
-
-			// ✅ Update filter size after preview image is opened
 			updateFilterSizeBounds();
 		} else {
 			JOptionPane.showMessageDialog(null, "Failed to open the image!", "Error", JOptionPane.ERROR_MESSAGE);
 		}
 	}
-
 	private int[] samplePixelValues(ImageProcessor ip, int sampleSize) {
-		Object pixels = ip.getPixels(); // Get the raw pixel array
-		int totalPixels = ip.getWidth() * ip.getHeight(); // Total pixels
-
+		Object pixels = ip.getPixels();
+		int totalPixels = ip.getWidth() * ip.getHeight();
 		int[] sampledValues = new int[Math.min(sampleSize, totalPixels)];
 
 		if (pixels instanceof byte[]) {
 			byte[] bytePixels = (byte[]) pixels;
 			for (int i = 0; i < sampledValues.length; i++) {
-				sampledValues[i] = bytePixels[(int) (Math.random() * totalPixels)] & 0xFF; // Convert to unsigned int
+				sampledValues[i] = bytePixels[(int) (Math.random() * totalPixels)] & 0xFF;
 			}
 		} else if (pixels instanceof short[]) {
 			short[] shortPixels = (short[]) pixels;
 			for (int i = 0; i < sampledValues.length; i++) {
-				sampledValues[i] = shortPixels[(int) (Math.random() * totalPixels)] & 0xFFFF; // Convert to unsigned int
+				sampledValues[i] = shortPixels[(int) (Math.random() * totalPixels)] & 0xFFFF;
 			}
 		} else if (pixels instanceof int[]) {
 			int[] intPixels = (int[]) pixels;
 			for (int i = 0; i < sampledValues.length; i++) {
 				sampledValues[i] = intPixels[(int) (Math.random() * totalPixels)];
 			}
+		} else if (pixels instanceof float[]) {
+			float[] floatPixels = (float[]) pixels;
+			for (int i = 0; i < sampledValues.length; i++) {
+				sampledValues[i] = (int) floatPixels[(int) (Math.random() * totalPixels)];
+			}
 		} else {
 			throw new IllegalArgumentException("Unsupported image type: " + pixels.getClass().getSimpleName());
 		}
-
 		return sampledValues;
 	}
-	// Find the quantile corresponding to the MNI
+
 	private int findQuantile(int[] sortedValues, int MNI) {
 		int index = Arrays.binarySearch(sortedValues, MNI);
-		if (index < 0) index = -index - 1; // Get the insertion point
-		return (int) ((index / (double) sortedValues.length) * 10000); // Convert to percentage
+		if (index < 0) index = -index - 1;
+		return (int) ((index / (double) sortedValues.length) * 10000);
 	}
 
 	private void updateQuantile() {
@@ -234,12 +222,10 @@ public class Intensify3D {
 			quantileLabel.setText("N/A");
 			return;
 		}
-
 		ImagePlus image = IJ.openImage(selectedImageFile.getAbsolutePath());
 		if (image != null) {
 			ImageProcessor ip = image.getProcessor();
 			int[] pixelValues = samplePixelValues(ip, 10000);
-
 			if (pixelValues.length > 0) {
 				Arrays.sort(pixelValues);
 				int MNIValue = (int) MNISpinner.getValue();
@@ -250,7 +236,6 @@ public class Intensify3D {
 			}
 		}
 	}
-
 	public void generateNoiseImages(JProgressBar progressBar) {
 		if (stackFolderField.getText().isEmpty()) {
 			JOptionPane.showMessageDialog(null, "No directory selected!", "Error", JOptionPane.ERROR_MESSAGE);
@@ -258,37 +243,28 @@ public class Intensify3D {
 		}
 
 		File directory = new File(stackFolderField.getText());
-		File[] imageFiles = directory.listFiles((dir, name) -> name.toLowerCase().endsWith(".tif") || name.toLowerCase().endsWith(".tiff"));
+		File outputDir = new File(directory, "noise_images");
+		if (!outputDir.exists()) outputDir.mkdir();
 
+		File[] imageFiles = directory.listFiles((dir, name) -> name.toLowerCase().endsWith(".tif") || name.toLowerCase().endsWith(".tiff"));
 		if (imageFiles == null || imageFiles.length == 0) {
 			JOptionPane.showMessageDialog(null, "No TIFF images found!", "Error", JOptionPane.ERROR_MESSAGE);
 			return;
 		}
 
-		// ✅ Show progress bar when execution starts
+		Arrays.sort(imageFiles, Comparator.comparing(File::getName));
+
 		SwingUtilities.invokeLater(() -> progressBar.setVisible(true));
-
-		// Create output directory if it doesn't exist
-		File outputDir = new File(directory, "noise_images");
-		if (!outputDir.exists()) outputDir.mkdir();
-
-		int totalFiles = imageFiles.length;
 		progressBar.setValue(0);
 
-		// ✅ Precompute the SG kernel once per stack
+		int totalFiles = imageFiles.length;
 		int filterSize = (int) filterSizeSpinner.getValue();
-		float[] sgKernel = getCachedSavitzkyGolayKernel(filterSize); // Compute once
 
 		for (int i = 0; i < totalFiles; i++) {
-			processImage(imageFiles[i], outputDir, sgKernel); // ✅ Pass the precomputed kernel
-			int progress = (int) (((i + 1) / (double) totalFiles) * 100);
-
-			// ✅ Update progress on the UI thread
-			final int finalProgress = progress;
-			SwingUtilities.invokeLater(() -> progressBar.setValue(finalProgress));
+			processImage(imageFiles[i], outputDir, filterSize); // Pass filterSize here
+			updateProgress(progressBar, i, totalFiles);
 		}
 
-		// ✅ Hide progress bar after completion
 		SwingUtilities.invokeLater(() -> {
 			progressBar.setValue(100);
 			JOptionPane.showMessageDialog(null, "Noise images generated successfully!", "Done", JOptionPane.INFORMATION_MESSAGE);
@@ -296,128 +272,138 @@ public class Intensify3D {
 		});
 	}
 
-	private void processImage(File imageFile, File outputDir, float[] sgKernel) {
+	private void processImage(File imageFile, File outputDir, int filterSize) {
 		ImagePlus image = IJ.openImage(imageFile.getAbsolutePath());
-		if (image == null) {
-			System.err.println("Failed to open image: " + imageFile.getName());
-			return;
-		}
+		if (image == null) return;
 
 		ImageProcessor ip = image.getProcessor();
+		printImageStats("Original", imageFile.getName(), ip);
 
-		// Compute median intensity
+		int medianIntensity = computeMedian(ip);
+		int threshold = computeThreshold(ip);
+
+		replaceHighIntensityPixels(ip, threshold, medianIntensity);
+		printImageStats("After Thresholding", imageFile.getName(), ip);
+
+		// *** CORRECTED: Call applySavitzkyGolayFilter with the ImageProcessor ***
+		applySavitzkyGolayFilter(ip, filterSize);
+		printImageStats("After SG Filter", imageFile.getName(), ip);
+
+		saveImage(ip, outputDir, imageFile.getName());
+	}
+
+	private int computeMedian(ImageProcessor ip) {
 		ImageStatistics stats = ImageStatistics.getStatistics(ip, ImageStatistics.MEDIAN, null);
-		int medianIntensity = (int) stats.median;
-
-		// Get quantile threshold based on MNI
-		int[] pixelValues = samplePixelValues(ip, 10000);
-		Arrays.sort(pixelValues);
-		int MNIValue = (int) MNISpinner.getValue();
-		int quantileThreshold = findQuantile(pixelValues, MNIValue);
-
-		// Replace pixels above the quantile with the median intensity
-		replaceHighIntensityPixels(ip, quantileThreshold, medianIntensity);
-
-		// ✅ Apply the precomputed SG filter instead of recalculating it
-		applySavitzkyGolayFilter(ip, sgKernel);
-
-		// Save the processed Noise image
-		String outputName = "noise_" + imageFile.getName();
-		File outputFile = new File(outputDir, outputName);
-		IJ.saveAsTiff(new ImagePlus(outputName, ip), outputFile.getAbsolutePath());
+		return (int) stats.median;
 	}
 
 
-	// Replace pixels above the quantile threshold with the median intensity
-	private void replaceHighIntensityPixels(ImageProcessor ip, int threshold, int median) {
+	private int computeThreshold(ImageProcessor ip) {
+		int[] pixelValues = samplePixelValues(ip, 10000);
+		Arrays.sort(pixelValues);
+		int referenceQuantile = getReferenceQuantile(ip, (int) MNISpinner.getValue());
+		int quantileIndex = Math.min((int) (referenceQuantile / 10000.0 * pixelValues.length), pixelValues.length - 1);
+		return pixelValues[quantileIndex];
+	}
+
+	private int getReferenceQuantile(ImageProcessor ip, int MNIValue) {
+		int[] pixelValues = samplePixelValues(ip, 10000);
+		if (pixelValues.length > 0) {
+			Arrays.sort(pixelValues);
+			return findQuantile(pixelValues, MNIValue);
+		} else {
+			return 10000;
+		}
+	}
+
+	private void saveImage(ImageProcessor ip, File outputDir, String originalName) {
+		File outputFile = new File(outputDir, "noise_" + originalName);
 		int width = ip.getWidth();
 		int height = ip.getHeight();
 
+		if (!(ip instanceof ShortProcessor)) {
+			FloatProcessor fp = ip.convertToFloatProcessor();
+			float[] floatPixels = (float[]) fp.getPixels();
+			short[] shortPixels = new short[width * height];
+			for (int i = 0; i < floatPixels.length; i++) {
+				shortPixels[i] = (short) Math.min(Math.max(floatPixels[i], 0), 65535); // Clamp
+			}
+			ShortProcessor shortIp = new ShortProcessor(width, height);
+			shortIp.setPixels(shortPixels);
+			ip = shortIp;
+		}
+
+		IJ.saveAsTiff(new ImagePlus(outputFile.getName(), ip), outputFile.getAbsolutePath());
+	}
+
+	private void updateProgress(JProgressBar progressBar, int currentIndex, int totalFiles) {
+		int progress = (int) (((currentIndex + 1) / (double) totalFiles) * 100);
+		SwingUtilities.invokeLater(() -> progressBar.setValue(progress));
+	}
+
+	private void printImageStats(String stage, String imageName, ImageProcessor ip) {
+		ImageStatistics stats = ImageStatistics.getStatistics(ip, ImageStatistics.MEDIAN + ImageStatistics.MIN_MAX, null);
+		System.out.println(stage + " | Image: " + imageName +
+				" | Median: " + stats.median +
+				" | Min: " + stats.min + " | Max: " + stats.max);
+	}
+
+	/**
+	 * CORRECTED:  This method now performs the ENTIRE filtering process, including
+	 * normalization, calling SavitzkyGolay2D.applyFilter, and de-normalization.  It
+	 * operates on the ImageProcessor directly.
+	 */
+	private void applySavitzkyGolayFilter(ImageProcessor ip, int filterSize) {
+		// 1. Convert to FloatProcessor
+		FloatProcessor fp = ip.convertToFloatProcessor();
+
+		// 2. Get original min/max
+		double origMin = fp.getMin();
+		double origMax = fp.getMax();
+
+		// 3. Add a small offset *before* normalization (CRITICAL for avoiding corner artifacts)
+		double offset = (origMax - origMin) * 0.001; // 0.1% of the original range
+		if (offset == 0) offset = 1e-6; //handle flat images
+
+		// 4. Normalize to (approximately) 0-1 range, WITH the offset
+		if (origMax > origMin) { // Avoid division by zero if image is completely flat
+			fp.add(offset); // Add to all pixels
+			fp.subtract(origMin);
+			fp.multiply(1.0 / (origMax - origMin + offset));
+		}
+
+
+		// 5. Call the SavitzkyGolay2D filter (which now does padding correctly)
+		SavitzkyGolay2D.applyFilter(fp, filterSize);
+
+		// 6. Restore original intensity range, accounting for the offset
+		fp.multiply(origMax - origMin + offset);
+		fp.add(origMin);
+		fp.subtract(offset);
+
+		// 7. Convert back to ShortProcessor (if needed), with clamping
+		short[] shortPixels = new short[fp.getWidth() * fp.getHeight()];
+		float[] floatPixels = (float[]) fp.getPixels();
+
+		for (int i = 0; i < floatPixels.length; i++) {
+			shortPixels[i] = (short) Math.min(Math.max(floatPixels[i], 0), 65535); // Clamp
+		}
+
+		ShortProcessor shortIp = new ShortProcessor(fp.getWidth(), fp.getHeight());
+		shortIp.setPixels(shortPixels);
+		ip.setPixels(shortIp.getPixels()); // Set the result back to the *original* ImageProcessor
+	}
+
+	private void replaceHighIntensityPixels(ImageProcessor ip, int threshold, int median) {
+		int width = ip.getWidth();
+		int height = ip.getHeight();
 		for (int y = 0; y < height; y++) {
 			for (int x = 0; x < width; x++) {
-				int pixelValue = ip.getPixel(x, y);
-				if (pixelValue > threshold) {
+				if (ip.getPixel(x, y) > threshold) {
 					ip.putPixel(x, y, median);
 				}
 			}
 		}
-	}
-
-	private void applySavitzkyGolayFilter(ImageProcessor ip, float[] sgKernel) {
-		FloatProcessor fp = ip.convertToFloatProcessor();
-		fp.convolve(sgKernel, (int) Math.sqrt(sgKernel.length), (int) Math.sqrt(sgKernel.length));
-
-		// ✅ Convert back to ShortProcessor if necessary
-		if (ip instanceof ij.process.ShortProcessor) {
-			short[] shortPixels = new short[ip.getWidth() * ip.getHeight()];
-			float[] floatPixels = (float[]) fp.getPixels();
-
-			for (int i = 0; i < shortPixels.length; i++) {
-				shortPixels[i] = (short) Math.round(floatPixels[i]); // ✅ Convert float to short safely
-			}
-
-			ip.setPixels(shortPixels); // ✅ Use correct pixel format
-		} else {
-			ip.setPixels(fp.getPixels()); // ✅ Set normally if not a ShortProcessor
-		}
-	}
-
-	// ✅ Cached LUT for Savitzky-Golay kernels to avoid redundant calculations
-
-	private float[] getCachedSavitzkyGolayKernel(int size) {
-		if (sgKernelCache.containsKey(size)) {
-			return sgKernelCache.get(size);
-		}
-
-		float[] kernel = generateSavitzkyGolayKernel(size);
-		sgKernelCache.put(size, kernel);
-		return kernel;
-	}
-
-	// ✅ HashMap to store precomputed SG kernels
-	private final HashMap<Integer, float[]> sgKernelCache = new HashMap<>();
-
-
-	// Generate a 2D Savitzky-Golay kernel dynamically
-	private float[] generateSavitzkyGolayKernel(int size) {
-		float[] kernel = new float[size * size];
-		int center = size / 2;
-		double sigma = size / 3.0; // Standard deviation for Gaussian-like weighting
-
-		// Create a circular mask
-		double sum = 0;
-		for (int y = 0; y < size; y++) {
-			for (int x = 0; x < size; x++) {
-				int dx = x - center;
-				int dy = y - center;
-				double distance = Math.sqrt(dx * dx + dy * dy);
-
-				if (distance <= center) { // Inside the circular mask
-					kernel[y * size + x] = (float) computeSGCoefficient(dx, dy, size, sigma);
-					sum += kernel[y * size + x];
-				} else {
-					kernel[y * size + x] = 0; // Outside the circular area
-				}
-			}
-		}
-
-		// Normalize the kernel so sum = 1
-		if (sum > 0) {
-			for (int i = 0; i < kernel.length; i++) {
-				kernel[i] /= sum;
-			}
-		}
-
-		return kernel;
-	}
-
-	// Compute SG coefficient with a Gaussian-like weighting inside the circle
-	private double computeSGCoefficient(int x, int y, int size, double sigma) {
-		return Math.exp(-(x * x + y * y) / (2.0 * sigma * sigma)); // Gaussian decay
-	}
-	// Compute SG coefficient (simplified polynomial fit)
-	private double computeSGCoefficient(int x, int y, int size) {
-		return Math.exp(-(x * x + y * y) / (2.0 * (size / 2.0) * (size / 2.0))); // Gaussian-like approximation
 	}
 
 	public void generateNormalizedImages(JProgressBar progressBar) {
@@ -431,10 +417,10 @@ public class Intensify3D {
 		File normDir = new File(directory, "norm_noise");
 
 		if (!noiseDir.exists()) {
-			JOptionPane.showMessageDialog(null, "noise images not found!", "Error", JOptionPane.ERROR_MESSAGE);
+			JOptionPane.showMessageDialog(null, "Noise images not found!", "Error", JOptionPane.ERROR_MESSAGE);
 			return;
 		}
-		if (!normDir.exists()) normDir.mkdir(); // Create the output folder if it doesn’t exist
+		if (!normDir.exists()) normDir.mkdir();
 
 		File[] imageFiles = directory.listFiles((dir, name) -> name.toLowerCase().endsWith(".tif") || name.toLowerCase().endsWith(".tiff"));
 
@@ -453,15 +439,12 @@ public class Intensify3D {
 			File noiseImageFile = new File(noiseDir, "noise_" + originalImageFile.getName());
 
 			if (!noiseImageFile.exists()) {
-				System.err.println("noise image not found for: " + originalImageFile.getName());
+				System.err.println("Noise image not found for: " + originalImageFile.getName());
 				continue;
 			}
 
 			normalizeAndSave(originalImageFile, noiseImageFile, normDir);
-
-			int progress = (int) (((i + 1) / (double) totalFiles) * 100);
-			final int finalProgress = progress;
-			SwingUtilities.invokeLater(() -> progressBar.setValue(finalProgress));
+			updateProgress(progressBar, i, totalFiles);
 		}
 
 		SwingUtilities.invokeLater(() -> {
@@ -470,7 +453,6 @@ public class Intensify3D {
 			progressBar.setVisible(false);
 		});
 	}
-
 	private void normalizeAndSave(File originalFile, File noiseFile, File normDir) {
 		ImagePlus originalImage = IJ.openImage(originalFile.getAbsolutePath());
 		ImagePlus noiseImage = IJ.openImage(noiseFile.getAbsolutePath());
@@ -483,25 +465,21 @@ public class Intensify3D {
 		ImageProcessor originalIp = originalImage.getProcessor().convertToFloatProcessor();
 		ImageProcessor noiseIp = noiseImage.getProcessor().convertToFloatProcessor();
 
-		// Normalize noise image to [0,1]
-		double minnoise = noiseIp.getMin();
-		double maxnoise = noiseIp.getMax();
-		noiseIp.subtract(minnoise);
-		noiseIp.multiply(1.0 / (maxnoise - minnoise)); // Scale to [0,1]
+		// Normalize noise image to max 1
+		double maxNoise = noiseIp.getMax(); // Use a consistent naming convention (maxNoise, not maxnoise)
+		noiseIp.multiply(1.0 / maxNoise);
 
 		// Divide original by normalized noise (avoid divide-by-zero)
 		int width = originalIp.getWidth();
 		int height = originalIp.getHeight();
-
 		for (int y = 0; y < height; y++) {
 			for (int x = 0; x < width; x++) {
 				float origValue = originalIp.getPixelValue(x, y);
 				float backValue = noiseIp.getPixelValue(x, y);
-
-				if (backValue > 0) { // Avoid divide-by-zero
+				if (backValue > 0) {
 					originalIp.putPixelValue(x, y, origValue / backValue);
 				} else {
-					originalIp.putPixelValue(x, y, origValue); // Keep original value if noise is zero
+					originalIp.putPixelValue(x, y, origValue); // Keep the original value if noise is zero
 				}
 			}
 		}
@@ -509,11 +487,12 @@ public class Intensify3D {
 		// Save normalized image
 		String outputName = "norm_" + originalFile.getName();
 		File outputFile = new File(normDir, outputName);
-		IJ.saveAsTiff(new ImagePlus(outputName, originalIp), outputFile.getAbsolutePath());
+		ImageProcessor ip = originalIp.convertToShortProcessor();  // Convert to 16-bit
+		ImagePlus outputImage = new ImagePlus(outputName, ip);
+		IJ.saveAsTiff(outputImage, outputFile.getAbsolutePath());
 	}
 
 	public static void main(String[] args) {
-		// Ensure GUI runs on the Event Dispatch Thread (EDT)
 		javax.swing.SwingUtilities.invokeLater(() -> {
 			new ImageJ();
 			Intensify3D gui = new Intensify3D();
