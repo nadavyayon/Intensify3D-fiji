@@ -1,3 +1,5 @@
+# this code is literally a failed attempt to convert a matlab script to Java using Ai models - do not use!!!!
+
 # Intensify3D-Fiji  
 *A Fiji Plugin for Image Normalization and Background Correction*  
 
