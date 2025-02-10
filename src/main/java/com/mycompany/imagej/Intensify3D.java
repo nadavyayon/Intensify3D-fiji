@@ -6,7 +6,7 @@ import ij.ImagePlus;
 import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
 import ij.process.ImageStatistics;
-import com.mycompany.imagej.SavitzkyGolay2D; // Corrected import
+import com.mycompany.imagej.SavitzkyGolay2D;
 import ij.process.ShortProcessor;
 
 import java.util.*;
@@ -253,7 +253,6 @@ public class Intensify3D {
 		}
 
 		Arrays.sort(imageFiles, Comparator.comparing(File::getName));
-
 		SwingUtilities.invokeLater(() -> progressBar.setVisible(true));
 		progressBar.setValue(0);
 
@@ -278,6 +277,9 @@ public class Intensify3D {
 
 		ImageProcessor ip = image.getProcessor();
 		printImageStats("Original", imageFile.getName(), ip);
+		// Get original min and max BEFORE any processing
+		double originalMin = ip.getMin();
+		double originalMax = ip.getMax();
 
 		int medianIntensity = computeMedian(ip);
 		int threshold = computeThreshold(ip);
@@ -285,10 +287,14 @@ public class Intensify3D {
 		replaceHighIntensityPixels(ip, threshold, medianIntensity);
 		printImageStats("After Thresholding", imageFile.getName(), ip);
 
-		// *** CORRECTED: Call applySavitzkyGolayFilter with the ImageProcessor ***
 		applySavitzkyGolayFilter(ip, filterSize);
 		printImageStats("After SG Filter", imageFile.getName(), ip);
 
+
+		// *** KEY CHANGE:  Set min/max BEFORE saving ***
+		if (ip instanceof ShortProcessor) {
+			((ShortProcessor) ip).setMinAndMax(originalMin, originalMax);
+		}
 		saveImage(ip, outputDir, imageFile.getName());
 	}
 
@@ -318,20 +324,6 @@ public class Intensify3D {
 
 	private void saveImage(ImageProcessor ip, File outputDir, String originalName) {
 		File outputFile = new File(outputDir, "noise_" + originalName);
-		int width = ip.getWidth();
-		int height = ip.getHeight();
-
-		if (!(ip instanceof ShortProcessor)) {
-			FloatProcessor fp = ip.convertToFloatProcessor();
-			float[] floatPixels = (float[]) fp.getPixels();
-			short[] shortPixels = new short[width * height];
-			for (int i = 0; i < floatPixels.length; i++) {
-				shortPixels[i] = (short) Math.min(Math.max(floatPixels[i], 0), 65535); // Clamp
-			}
-			ShortProcessor shortIp = new ShortProcessor(width, height);
-			shortIp.setPixels(shortPixels);
-			ip = shortIp;
-		}
 
 		IJ.saveAsTiff(new ImagePlus(outputFile.getName(), ip), outputFile.getAbsolutePath());
 	}
@@ -382,7 +374,9 @@ public class Intensify3D {
 		fp.subtract(offset);
 
 		// 7. Convert back to ShortProcessor (if needed), with clamping
+
 		short[] shortPixels = new short[fp.getWidth() * fp.getHeight()];
+
 		float[] floatPixels = (float[]) fp.getPixels();
 
 		for (int i = 0; i < floatPixels.length; i++) {
@@ -390,8 +384,11 @@ public class Intensify3D {
 		}
 
 		ShortProcessor shortIp = new ShortProcessor(fp.getWidth(), fp.getHeight());
+		shortIp.setMinAndMax(origMin, origMax);
 		shortIp.setPixels(shortPixels);
+
 		ip.setPixels(shortIp.getPixels()); // Set the result back to the *original* ImageProcessor
+
 	}
 
 	private void replaceHighIntensityPixels(ImageProcessor ip, int threshold, int median) {
@@ -453,6 +450,7 @@ public class Intensify3D {
 			progressBar.setVisible(false);
 		});
 	}
+
 	private void normalizeAndSave(File originalFile, File noiseFile, File normDir) {
 		ImagePlus originalImage = IJ.openImage(originalFile.getAbsolutePath());
 		ImagePlus noiseImage = IJ.openImage(noiseFile.getAbsolutePath());
@@ -466,8 +464,13 @@ public class Intensify3D {
 		ImageProcessor noiseIp = noiseImage.getProcessor().convertToFloatProcessor();
 
 		// Normalize noise image to max 1
-		double maxNoise = noiseIp.getMax(); // Use a consistent naming convention (maxNoise, not maxnoise)
+		double maxNoise = noiseIp.getMax();
 		noiseIp.multiply(1.0 / maxNoise);
+
+		// *** Get original min/max BEFORE division ***
+		double originalMin = originalIp.getMin();
+		double originalMax = originalIp.getMax();
+
 
 		// Divide original by normalized noise (avoid divide-by-zero)
 		int width = originalIp.getWidth();
@@ -479,7 +482,7 @@ public class Intensify3D {
 				if (backValue > 0) {
 					originalIp.putPixelValue(x, y, origValue / backValue);
 				} else {
-					originalIp.putPixelValue(x, y, origValue); // Keep the original value if noise is zero
+					originalIp.putPixelValue(x, y, origValue); // Keep original value
 				}
 			}
 		}
@@ -487,8 +490,12 @@ public class Intensify3D {
 		// Save normalized image
 		String outputName = "norm_" + originalFile.getName();
 		File outputFile = new File(normDir, outputName);
-		ImageProcessor ip = originalIp.convertToShortProcessor();  // Convert to 16-bit
-		ImagePlus outputImage = new ImagePlus(outputName, ip);
+
+		// *** KEY CHANGE: Convert to ShortProcessor and set min/max ***
+		ShortProcessor shortIp = originalIp.convertToShortProcessor();
+		shortIp.setMinAndMax(originalMin, originalMax); // Preserve original range
+
+		ImagePlus outputImage = new ImagePlus(outputName, shortIp);
 		IJ.saveAsTiff(outputImage, outputFile.getAbsolutePath());
 	}
 
