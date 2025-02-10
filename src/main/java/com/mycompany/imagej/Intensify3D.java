@@ -3,6 +3,7 @@ package com.mycompany.imagej;
 import ij.IJ;
 import ij.ImageJ;
 import ij.ImagePlus;
+import ij.plugin.PlugIn;
 import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
 import ij.process.ImageStatistics;
@@ -18,7 +19,7 @@ import java.io.FilenameFilter;
 import javax.swing.JProgressBar;
 import javax.swing.SwingUtilities;
 
-public class Intensify3D {
+public class Intensify3D implements PlugIn {
 
 	// ... (GUI components - no changes here) ...
 	private JTextField stackFolderField;       // Text field to display/enter the image stack directory.
@@ -499,11 +500,38 @@ public class Intensify3D {
 		IJ.saveAsTiff(outputImage, outputFile.getAbsolutePath());
 	}
 
-	public static void main(String[] args) {
-		javax.swing.SwingUtilities.invokeLater(() -> {
-			new ImageJ();
-			Intensify3D gui = new Intensify3D();
-			gui.showDialog();
-		});
+
+	@Override
+	public void run(String s) {
+		showDialog();
+	}
+
+	public void showAbout() {
+		IJ.showMessage("Intensify3D",
+				"ImageJ plugin for normalizing 3D Image Stacks"
+		);
+	}
+
+	/**
+	 * Main method for debugging.
+	 *
+	 * For debugging, it is convenient to have a method that starts ImageJ, loads
+	 * an image and calls the plugin, e.g. after setting breakpoints.
+	 *
+	 * @param args unused
+	 */
+	public static void main(String[] args) throws Exception {
+		// set the plugins.dir property to make the plugin appear in the Plugins menu
+		// see: https://stackoverflow.com/a/7060464/1207769
+		Class<?> clazz = Intensify3D.class;
+		java.net.URL url = clazz.getProtectionDomain().getCodeSource().getLocation();
+		java.io.File file = new java.io.File(url.toURI());
+		System.setProperty("plugins.dir", file.getAbsolutePath());
+
+		// start ImageJ
+		new ImageJ();
+
+		// run the plugin
+		IJ.runPlugIn(clazz.getName(), "");
 	}
 }
