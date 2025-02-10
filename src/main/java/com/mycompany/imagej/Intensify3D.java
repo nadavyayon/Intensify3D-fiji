@@ -127,13 +127,11 @@ public class Intensify3D implements PlugIn {
 		filterSizeSpinner.setModel(model);
 	}
 	private void browseForDirectory(ActionEvent e) {
-		JFileChooser fileChooser = new JFileChooser();
-		fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-		int returnValue = fileChooser.showOpenDialog(null);
-		if (returnValue == JFileChooser.APPROVE_OPTION) {
-			File selectedFolder = fileChooser.getSelectedFile();
-			stackFolderField.setText(selectedFolder.getAbsolutePath());
-			updateImageCount(selectedFolder);
+		ij.io.DirectoryChooser directoryChooser = new ij.io.DirectoryChooser("Select Image Stack Directory");
+		String selectedFolder = directoryChooser.getDirectory();
+		if (selectedFolder != null) {
+			stackFolderField.setText(selectedFolder);
+			updateImageCount(new File(selectedFolder));
 		}
 	}
 
